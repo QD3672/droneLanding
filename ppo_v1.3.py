@@ -330,10 +330,13 @@ if __name__ == '__main__':
         
         print("Load model")
         custom_objects = {'learning_rate':linear_schedule(0.01),
-                      'ent_coef':0.001,
+                      'ent_coef':0.1,
                       'n_steps':512,
                       'batch_size':128,
                       'n_epochs':20,
+                          'gamma':0.1,
+                          'gae_lambda':0.65,
+                          'clip_range':linear_schedule(0.2)
                         }
         #ppo_drone.zip
         #tmp/back_up.zip
@@ -352,7 +355,7 @@ if __name__ == '__main__':
         
         callback = SaveOnBestTrainingRewardCallback(check_freq=512  , log_dir=log_dir,)
         print("------------- Start Learning -------------")
-        model_new.learn(total_timesteps=1000000 ,callback=callback, tb_log_name="PPO-00003")
+        model_new.learn(total_timesteps=100000 ,callback=callback, tb_log_name="PPO-00003")
         model_new.save('ppo_drone_landing')
         x*=0.9
         y*=0.9 
