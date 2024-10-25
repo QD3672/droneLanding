@@ -258,8 +258,8 @@ if __name__ == '__main__':
         #__multirotor_client.takeoffAsync(timeout_sec = 2, vehicle_name = agent_name)
 
     
-    #env = SubprocVecEnv([lambda agent_name=agent_name: gym.make(env_id) for agent_name in agents])
-    env = DummyVecEnv([lambda agent_name=agent_name: gym.make(env_id) for agent_name in agents])
+    env = SubprocVecEnv([lambda agent_name=agent_name: gym.make(env_id) for agent_name in agents])
+    #env = DummyVecEnv([lambda agent_name=agent_name: gym.make(env_id) for agent_name in agents])
 
     #env = VecFrameStack(env,4)
     """
@@ -343,9 +343,9 @@ if __name__ == '__main__':
                         tensorboard_log="./board/",
                         learning_rate=linear_schedule(0.01),
                         ent_coef=0.01,
-                        n_steps=256,
+                        n_steps=512,
                         batch_size=128,
-                        n_epochs=10,
+                        n_epochs=20,
                         )
         '''
         model_new = PPO.load('ppo_drone_landing.zip',env=env1,custom_objects=custom_objects)

@@ -94,15 +94,19 @@ class CustomEnv(gym.Env):
     def _get_bounding_box_info(self):     
         # Get the camera image from AirSim
         try:
-            response = self.client.simGetImages([airsim.ImageRequest("3", airsim.ImageType.Scene, False, False)])
-            img1d = np.frombuffer(response[0].image_data_uint8, dtype=np.uint8)
+            response = self.client.simGetImage("3", airsim.ImageType.Scene)
+            image = cv2.imdecode(airsim.string_to_uint8_array(response), cv2.IMREAD_UNCHANGED)
 
             # If image data is empty, generate a blank image
-            if img1d.size == 0:
+            if image.size == 0:
                 raise ValueError("No image data received")
                 
-            # Reshape the image data into RGB format
-            img_rgb = img1d.reshape(response[0].height, response[0].width, 3)
+            if image.shape[2] == 4:
+                # Remove the alpha channel
+                img_rgb = cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
+            else:
+                img_rgb = image
+        
         except Exception as e:
             # If there's an error receiving the image, generate a blank placeholder image
             print(f"Error receiving image: {e}. Using a blank placeholder image.")
