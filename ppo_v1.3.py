@@ -230,7 +230,7 @@ log_dir = "tmp/"
 os.makedirs(log_dir, exist_ok=True)
 
 if __name__ == '__main__':
-    num_envs = 0 # Set the number of environments
+    num_envs =  3# Set the number of environments
     env_id = "Step1-v0"
     #"AutoDrone-v0"
     #"MultiDrone-v0"
@@ -251,15 +251,15 @@ if __name__ == '__main__':
         agent_name = "Drone" + str(i)
         agents.append(agent_name)
         if agent_name not in exist_drone_name:
-            pose = airsim.Pose(airsim.Vector3r(i-10, i-10, -2), airsim.to_quaternion(0, 0, 0))
+            pose = airsim.Pose(airsim.Vector3r(-20*(i+1), 0, -5), airsim.to_quaternion(0, 0, 0))
             __multirotor_client.simAddVehicle(agent_name, "simpleflight", pose) 
         __multirotor_client.enableApiControl(True,vehicle_name = agent_name)
         __multirotor_client.armDisarm(True,vehicle_name = agent_name)
         #__multirotor_client.takeoffAsync(timeout_sec = 2, vehicle_name = agent_name)
 
-    
-    env = SubprocVecEnv([lambda agent_name=agent_name: gym.make(env_id) for agent_name in agents])
-    #env = DummyVecEnv([lambda agent_name=agent_name: gym.make(env_id) for agent_name in agents])
+    __multirotor_client.reset()
+    env = SubprocVecEnv([lambda agent_name=agent_name: gym.make(env_id,vehicle_name = agent_name) for agent_name in agents])
+    #env = DummyVecEnv([lambda agent_name=agent_name: gym.make(env_id,vehicle_name = agent_name) for agent_name in agents])
 
     #env = VecFrameStack(env,4)
     """
@@ -330,9 +330,9 @@ if __name__ == '__main__':
         
         print("Load model")
         custom_objects = {'learning_rate':linear_schedule(0.01),
-                      'ent_coef':0.1,
-                      'n_steps':512,
-                      'batch_size':128,
+                      'ent_coef':0.01,
+                      'n_steps':128,
+                      'batch_size':64,
                       'n_epochs':20,
                           'gamma':0.1,
                           'gae_lambda':0.65,
@@ -346,9 +346,11 @@ if __name__ == '__main__':
                         tensorboard_log="./board/",
                         learning_rate=linear_schedule(0.01),
                         ent_coef=0.01,
-                        n_steps=512,
+                        n_steps=256,
                         batch_size=128,
-                        n_epochs=20,
+                        n_epochs=10,
+
+                        
                         )
         '''
         model_new = PPO.load('ppo_drone_landing.zip',env=env1,custom_objects=custom_objects)
