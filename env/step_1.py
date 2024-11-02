@@ -24,7 +24,7 @@ class CustomEnv(gym.Env):
         self.client.moveToZAsync(-5,2,vehicle_name = self.vehicle_name).join()
         
         self.step_length = 0.5
-        
+        self.pred_altitude = 10
         # Number of historical frames to store
         self.num_history = num_history
         self.history = None
@@ -34,12 +34,14 @@ class CustomEnv(gym.Env):
         self.total_reward = 0
         self.platform_detected = False
         # Define the action and observation space
-        self.action_space = spaces.Discrete(7)
-        
+        self.action_space = spaces.Tuple((
+                                        spaces.Discrete(7),  # Integer from 0 to 7
+                                        spaces.Box(low=-float('inf'), high=float('inf'), shape=(1,), dtype=np.float32)  # Float value
+                                    ))
         # tracker ID + bounding box info (x_min, y_min, x_max, y_max, center_x, center_y, area)
         self.observation_space = spaces.Dict({
-                                                'box_info': spaces.Box(low=0, high=1, shape=(self.num_history,8), dtype=np.float32)  # 7 + 1 for tracker ID
-                                                'image': spaces.Box(low=0, high=255, shape=(255, 256, 1), dtype=np.uint8)
+                                                "box_info": spaces.Box(low=0, high=1, shape=(self.num_history,8), dtype=np.float32),  # 7 + 1 for tracker ID
+                                                "image": spaces.Box(low=0, high=255, shape=(255, 256, 1), dtype=np.uint8)
                                             })
         self.drone_pose = self.client.simGetVehiclePose(vehicle_name = self.vehicle_name)
         # Load YOLOv8 model with tracking capability
@@ -53,19 +55,14 @@ class CustomEnv(gym.Env):
         self.client.simSetVehiclePose(pose=self.drone_pose, ignore_collision=True,vehicle_name = self.vehicle_name)
         self.total_reward = 0
         self.platform_detected = False
-        
+        self.pred_altitude = 10
         # Reset bounding box history and step_count
-        self.history = np.array([[0, 0, 0, 0, 0, 0.5, 0.5, 0],
-                                [0, 0, 0, 0, 0, 0.5, 0.5, 0],
-                                [0, 0, 0, 0, 0, 0.5, 0.5, 0]], dtype=np.float32)
+        self.history = None
 
         self.step_count = 0
-        for _ in range(self.num_history):
-            self.history = self.history[1:]  # Remove the oldest frame from history
-            self.history = np.append(self.history,self._get_bounding_box_info(),axis=0)  # Add the latest bounding box info
 
         infos = {}
-        return self.history, infos
+        return self._get_bounding_box_info(), infos
 
     def step(self, action):
         # Apply the action to the drone
@@ -80,8 +77,9 @@ class CustomEnv(gym.Env):
         
         self.client.moveByVelocityBodyFrameAsync(vx, vy, vz, 10)
         '''
+        self.pred_altitude = action[1]
         #print(action)
-        quad_offset = self.interpret_action(action)
+        quad_offset = self.interpret_action(action[0])
         #print(quad_offset)
         quad_vel = self.client.getMultirotorState(vehicle_name = self.vehicle_name).kinematics_estimated.linear_velocity
         self.client.moveByVelocityAsync(
@@ -92,9 +90,7 @@ class CustomEnv(gym.Env):
         )
 
         # Get new bounding box information and update the history
-        new_box_info = self._get_bounding_box_info()
-        self.history = self.history[1:]  # Remove the oldest frame from history
-        self.history = np.append(self.history,new_box_info,axis=0)  # Add the latest bounding box info
+        self.history = self._get_bounding_box_info()
         
         # Calculate the reward, terminations, and truncations
         reward, terminations, truncations = self._compute_reward()
@@ -126,7 +122,11 @@ class CustomEnv(gym.Env):
 
         return quad_offset
     
-    def _get_bounding_box_info(self):     
+    def _get_bounding_box_info(self):
+        obs = {
+                    "box_info": None,
+                    "image": None
+                }
         # Get the camera image from AirSim
         try:
             response = self.client.simGetImages([airsim.ImageRequest("3", airsim.ImageType.Scene, False, False)],vehicle_name = self.vehicle_name)
@@ -179,7 +179,9 @@ class CustomEnv(gym.Env):
             self.platform_detected = False
             self.consecutive_no_detection += 1
 
-        return box_info, img_rgb
+        obs["box_info"] = box_info
+        obs["image"] = img_rgb
+        return obs
 
     def _compute_reward(self):
         # Initialize reward for this timestep
@@ -231,11 +233,15 @@ class CustomEnv(gym.Env):
         velocity_magnitude = np.linalg.norm([velocity.x_val, velocity.y_val, velocity.z_val])
         altitude = -position.z_val  # AirSim uses right-handed coordinates, so altitude is -z
 
+        margin_of_error = 0.1 * altitude
+        if abs(self.pred_altitude - altitude) <= margin_of_error:
+            reward += 1  # Within the margin
+        else:
+            reward += -1  # Outside the margin
+            
         # Multiply the reward by altitude scaling
         reward += max(0, 1 - altitude / 10)
         
-        # Velocity check for low altitudes
-        reward -= velocity_magnitude/5 # Penalize if too fast
 
         # Landing reward check
         is_centered = detected_pad and distance_from_center < 0.2  # Check if centered when landing
@@ -258,7 +264,7 @@ class CustomEnv(gym.Env):
  
         # Termination condition if the total reward gets too low
         terminations = False
-        if self.total_reward < -50:
+        if self.total_reward < -20:
             terminations = True
 
         # Update the step count

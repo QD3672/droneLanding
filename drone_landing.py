@@ -6,7 +6,7 @@ from ultralytics import YOLO
 from matplotlib import pyplot as plt
 from PIL import Image
 import torch
-model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_small', pretrain=True)
+#model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_small', pretrain=True)
 
 
 #model = YOLO("D:/DroneSimulation/droneLanding/best.pt")
@@ -22,8 +22,11 @@ drone_pose = client.simGetVehiclePose()
 drone_position = client.getMultirotorState().kinematics_estimated.position
 print(drone_position)
 client.takeoffAsync().join()
+all_assets = client.simListAssets()
+bp_npc_assets = [asset for asset in all_assets if "BP_NPC" in asset]
 
-client.moveToZAsync(-10,2).join()
+client.moveByVelocityBodyFrameAsync(0, 0, 1, 1)
+client.simGetCollisionInfo()
 # set camera name and image type to request images and detections
 camera_name = "3"
 image_type = airsim.ImageType.Scene
@@ -45,9 +48,9 @@ def take_image():
     normal_confidence = output_dict['prediction_normal'][:, 3, :, :] # see https://arxiv.org/abs/2109.09881 for details
 
 
-    
+'''   
 while True:
     take_image()
     
 cv2.destroyAllWindows() 
-
+'''
